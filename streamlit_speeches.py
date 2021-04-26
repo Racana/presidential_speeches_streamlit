@@ -1,6 +1,5 @@
 import pandas as pd
 import streamlit as st
-import spacy
 from datetime import date 
 import numpy as np
 
@@ -24,8 +23,8 @@ speaker = st.sidebar.selectbox(
     'Speaker', speaker_list
 )
 
-st.title("Presidential Speech")
-st.write("Select one of the speaches below")
+st.header("Presidential Speech")
+st.subheader("Select one of the speaches below")
 
 speaker_frame = df.loc[df.speaker == speaker]
 
@@ -40,4 +39,5 @@ speech = st.selectbox(
 )
 
 body = speaker_frame[speaker_frame.title == speech.split(" - ")[-1]]['body'].values[0]
-st.markdown(body)
+new_body = body.replace(r"\n", r"\ ")
+st.text(new_body)
