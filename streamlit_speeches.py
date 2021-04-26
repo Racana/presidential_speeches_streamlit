@@ -39,5 +39,6 @@ speech = st.selectbox(
 )
 
 body = speaker_frame[speaker_frame.title == speech.split(" - ")[-1]]['body'].values[0]
-new_body = body.replace(r"\n", r"\ ")
-st.text(new_body)
+new_body = body.replace("\n", r"""   
+""")
+st.markdown(new_body)
