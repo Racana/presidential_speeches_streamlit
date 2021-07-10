@@ -2,11 +2,61 @@ import pandas as pd
 import streamlit as st
 from datetime import date 
 import numpy as np
+import torch
 
-df = pd.read_csv('presidential_speeches.csv')
-df.date = pd.to_datetime(df['date']).dt.date
+@st.cache()
+def load_paragraphs():
+    """
+    load csv files using Streamlit cache function
+    """
+    df = pd.read_csv(r'data/presidential_speeches_paragraphs.csv', index_col=0)
 
-df['speaker'] = np.where(df.date > date(2019,12,9), "Alberto Fernández", "Mauricio Macri")
+    return df
+
+@st.cache
+def load_sentences():
+    """
+    load csv files using Streamlit cache function
+    """
+    df = pd.read_csv(r'data/presidential_speeches_sentences.csv', index_col=0)
+
+    return df
+
+@st.cache
+def load_promises():
+    """
+    load csv files using Streamlit cache function
+    """
+    df = pd.read_csv(r'data/promises.csv')
+
+    return df
+
+@st.cache
+def load_tensor(filename):
+    """
+    load tensor files using Streamlit cache function
+    """
+    tensor = torch.load(filename)
+
+    return tensor
+
+def sim_matrix(a, b, eps=1e-8):
+    """
+    added eps for numerical stability
+    """
+    a_n, b_n = a.norm(dim=1)[:, None], b.norm(dim=1)[:, None]
+    a_norm = a / torch.clamp(a_n, min=eps)
+    b_norm = b / torch.clamp(b_n, min=eps)
+    sim_mt = torch.mm(a_norm, b_norm.transpose(0, 1))
+    
+    return sim_mt
+
+paragraphs_df = load_paragraphs()
+sentences_df = load_sentences()
+promises_df = load_promises()
+
+promises_embeddings = load_tensor(r'data/promises_embeddings.pt')
+sentences_embeddings = load_tensor(r'data/sentences_embeddings.pt')
 
 st.sidebar.title("Discursos presidenciales Argentina")
 st.sidebar.markdown(
@@ -17,33 +67,38 @@ Código utilizado en esta app pueden encontrarlos en [Github Pablo Racana](https
 """
 )
 
-speaker_list = df.speaker.unique().tolist()
+speaker_list = promises_df.speaker.unique()
 speaker = st.sidebar.selectbox(
     'Orador', speaker_list
 )
 
-st.header("Discursos presidenciales")
+st.header("Promesa presidencial")
 
-speaker_frame = df.loc[df.speaker == speaker]
-
-list_of_speeches =  [str(date)+" - "+title for date, title in zip(
-    speaker_frame.date.values.tolist(), 
-    speaker_frame.title.values.tolist()
-    )
-    ]
-
+list_of_promises =  promises_df.loc[promises_df['speaker'] == speaker, 'short_description'].values.tolist()
 speech = st.selectbox(
-    'Seleccione un discurso a continuación', list_of_speeches
+    'Seleccione una promesa a continuación', list_of_promises
 )
 
-st.subheader("Resumen")
+promise_index = promises_df.short_description.values.tolist().index(speech)
 
-summary = speaker_frame[speaker_frame.title == speech.split(" - ")[-1]]['summary'].values[0]
-new_summary = summary.replace("\n", r"""   
-""")
+promise = promises_df.loc[promise_index, 'promise']
+st.markdown("Promesa del presidente " + speaker + ' "' + promise + '"')
 
-with st.beta_expander("Ver resumen"):
-    st.markdown(new_summary)
+st.subheader("Menciones en discursos")
+
+sim_promise = sim_matrix(promises_embeddings, sentences_embeddings)
+top_value, top_index = torch.topk(sim_promise[promise_index], 1)
+
+print(top_value, top_index)
+
+uuid_top_result = sentences_df.index.values[top_index.item()]
+paragraph = paragraphs_df.loc[uuid_top_result, 'paragraphs']
+event = paragraphs_df.loc[uuid_top_result, 'title']
+
+paragraph = sentences_df.sentences[top_index.item()]
+
+with st.beta_expander(event):
+    st.markdown(paragraph)
 
 with st.beta_expander("Ver metodología"):
     st.markdown("""
@@ -82,7 +137,3 @@ with st.beta_expander("Ver metodología"):
 
 st.subheader("Discurso")
 
-body = speaker_frame[speaker_frame.title == speech.split(" - ")[-1]]['body'].values[0]
-new_body = body.replace("\n", r"""   
-""")
-st.markdown(new_body)
